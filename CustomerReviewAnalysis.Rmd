@@ -1,0 +1,1295 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r , eval = FALSE}
+if (require(pacman) == FALSE) {
+install.packages("pacman")
+}
+pacman::p_load(
+# scrapping
+polite, rvest, xml2, 
+# preprocessing
+tidyverse, dplyr, doParallel, 
+# data cleaning
+textclean, cld2, hunspell, Unicode, textstem, stringr, stopwords,
+# table creation
+tibble,tidyr,data.table, knitr, kableExtra,
+# tf_idf and Sentiment Analysis
+qdap, ngramr, tidytext, qdap, textdata, sentimentr, SentimentAnalysis, vader, 
+# visualization tools
+ggplot2, ggpubr,igraph, gridExtra, FSelector, ggraph,
+# text mining
+tm, SnowballC,  
+# machine learning
+caret, modelr,caTools,stargazer,
+# topic modeling
+topicmodels, udpipe, stm,wordcloud, wordcloud2, lda
+)
+```
+
+```{r polite scrapping}
+# Create polite session
+host <- "https://uk.trustpilot.com/"
+library(polite)
+bow <- polite::bow(host, force = TRUE)
+print(bow) #not scrapable using polite package
+
+```
+
+```{r, scrapping traditional banks}
+#Create a company list with three traditional banks
+company.list = c( 'https://uk.trustpilot.com/review/www.santander.co.uk',
+                  'https://uk.trustpilot.com/review/www.barclays.co.uk',
+                  'https://uk.trustpilot.com/review/www.hsbc.co.uk',
+                  'https://uk.trustpilot.com/review/www.nationwide.co.uk',
+                  'https://uk.trustpilot.com/review/www.natwest.com')
+
+#Scrape data from the web
+tra.data <- data.frame()
+for(j in 1:length(company.list)){
+  #find the last page of the review
+  lastpage = as.numeric(html_nodes(read_html(company.list[j]), '.pagination_paginationEllipsis__4lfLO+ .pagination-link_item__mkuN3') %>% html_text())
+
+  #for gentle scrapping, split the workload by every 200pages
+  seq(from = 1, to = lastpage, by = 200) -> page.seq
+  page.seq <- c(page.seq, lastpage+1)
+  for(i in 1:(length(page.seq)-1)){
+    for (page_num in page.seq[i]:(as.numeric(page.seq[i+1])-1)){
+
+      #assign a url to scrape
+      url = paste0(company.list[j],"?page=",page_num)
+      page = read_html(url)
+
+      #scrape data using css or xpath
+      company = gsub("https://uk.trustpilot.com/review/www.","",company.list[j]) %>% gsub("(.com|.co.uk)","",.)
+      cus_id = page %>% html_nodes('.styles_consumerName__dP8Um') %>% html_text()
+      cus_tot_review = page %>%  html_nodes('div.styles_consumerExtraDetails__fxS4S > div:nth-child(1) > span') %>%
+        html_text() %>% gsub(" (reviews|review)", "",.)
+      title = page %>% html_nodes('div.styles_reviewContent__0Q2Tg > h2') %>% html_text()
+      review = page %>% html_nodes('div.styles_reviewContent__0Q2Tg:last_child') %>% html_text()
+      score = page %>% html_nodes('.styles_reviewHeader__iU9Px' ) %>% html_attr('data-service-review-rating')
+
+      #save in dataframe
+      data.frame(company, cus_id, cus_tot_review, title, review, score) -> new.review
+      rbind(tra.data.test, new.review) -> tra.data
+
+      print(paste("Page:",page_num)) #check the progress
+    }
+  Sys.sleep(300)  #take a 5min break after scrapping 200 pages
+}
+}
+
+saveRDS(tra.data,"tra.data.rds")
+save.image()
+saveRDS(tra.data,"backup.rds")
+```
+
+```{r, scrapping digital banks}
+#Create a company list with three digital banks
+company.list = c( 'https://uk.trustpilot.com/review/www.monzo.com',
+                  'https://uk.trustpilot.com/review/starlingbank.com',
+                  'https://uk.trustpilot.com/review/www.revolut.com')
+
+#Scrape data from the web
+dig.data <- data.frame()
+for(j in 1:length(company.list)){
+  #find the last page of the review
+  lastpage = as.numeric(html_nodes(read_html(company.list[j]), '.pagination_paginationEllipsis__4lfLO+ .pagination-link_item__mkuN3') %>% html_text())
+
+  #for gentle scrapping, split the workload by every 200pages
+  seq(from = 1, to = lastpage, by = 200) -> page.seq
+  page.seq <- c(page.seq, lastpage+1)
+  for(i in 1:(length(page.seq)-1)){
+    for (page_num in page.seq[i]:(as.numeric(page.seq[i+1])-1)){
+
+      #assign a url to scrape
+      url = paste0(company.list[j],"?page=",page_num)
+      page = read_html(url)
+
+      #scrape data using css or xpath
+      company = gsub("https://uk.trustpilot.com/review/www.","",company.list[j]) %>% gsub("(.com|.co.uk)","",.)
+      cus_id = page %>% html_nodes('.styles_consumerName__dP8Um') %>% html_text()
+      cus_tot_review = page %>%  html_nodes('div.styles_consumerExtraDetails__fxS4S > div:nth-child(1) > span') %>%
+        html_text() %>% gsub(" (reviews|review)", "",.)
+      title = page %>% html_nodes('div.styles_reviewContent__0Q2Tg > h2') %>% html_text()
+      review = page %>% html_nodes('div.styles_reviewContent__0Q2Tg:last_child') %>% html_text()
+      score = page %>% html_nodes('.styles_reviewHeader__iU9Px' ) %>% html_attr('data-service-review-rating')
+
+      #save in dataframe
+      data.frame(company, cus_id, cus_tot_review, title, review, score) -> new.review
+      rbind(dig.data, new.review) -> dig.data
+
+      print(paste("Page:",page_num)) #check the progress
+    }
+  Sys.sleep(300)  #take a 5min break after scrapping 200 pages
+}
+}
+
+saveRDS(dig.data,"dig.data.rds")
+save.image()
+saveRDS(dig.data,"backup.2.rds")
+```
+
+```{r check the srapping result}
+summaru(tra.data)
+nrow(unique(tra.data))
+#22,356 observations
+
+summary(dig.data)
+nrow(unique(dig.data))
+#136,378 observations
+```
+
+```{r create id}
+#create a large list combining tra.data and dig.data
+banks.data = list(tra.data, dig.data)
+
+#create columns(id, review.only, review.total) and arrange data
+for (i in 1:2) {
+  banks.data[[i]] %>%mutate(id = row_number(),
+         review.only = substr(review,str_count(title)+1,str_count(review)),
+         review.total = paste0(title, " ", review.only)) %>%
+  select(id, company, cus_id, cus_tot_review, title, review.only, review.total, score) -> banks.data[[i]]
+}
+
+```
+
+
+```{r languagefilter}
+# select only english reviews
+tra.data.clean <- banks.data[[1]] %>% 
+  mutate(review_language = cld2::detect_language(review.total))
+
+view(tra.data.clean %>% filter(review_language != "en"))
+view(tra.data.clean %>% filter(is.na(review_language)))
+
+tra.data.clean <- tra.data.clean %>% 
+  filter(review_language == "en") %>% select(-c(review_language))
+#22,296 observation
+
+###digital bank###
+# select only English reviews
+dig.data.clean <- banks.data[[2]]%>% 
+  mutate(review_language = cld2::detect_language(review.total))
+
+view(dig.data.clean %>% filter(review_language != "en"))
+view(tra.data.clean %>% filter(is.na(review_language)))
+
+dig.data.clean <- dig.data.clean %>% 
+  filter(review_language == "en") %>% select(-c(review_language))
+#132,847 observations
+```
+
+```{r 3core}
+#Create a large list of clean datasets(tra.data.celan and dig.data.clean)
+banks.clean <- list(tra.data.clean, dig.data.clean)
+
+
+#Check the total review per customer(cus_tot_review)
+for (i in 1:2){
+  banks.clean[[i]]$cus_tot_review <- as.numeric(banks.clean[[i]]$cus_tot_review)
+  #banks.clean[[i]] %>% group_by(cus_tot_review,score) %>% count() 
+  banks.clean[[i]] %>%  filter(cus_tot_review >= 3) -> banks.clean[[i]]
+}
+#traditional 14,153 observation, digital 41,028 observation
+```
+
+
+```{r cleaning}
+#data cleaning
+clean.text = function(x)
+{
+  # convert to lower case
+  x = tolower(x)
+  # remove at
+  x = gsub("@\\w+", "", x)
+  # remove punctuation
+  x = gsub("[[:punct:]]", "", x)
+  # remove numbers
+  x = gsub("[[:digit:]]", "", x)
+  # remove links http
+  x = gsub("http\\w+", "", x)
+  # remove tabs
+  x = gsub("[ |\t]{2,}", "", x)
+  # remove blank spaces at the beginning
+  x = gsub("^ ", "", x)
+  # remove blank spaces at the end
+  x = gsub(" $", "", x)
+  # some other cleaning text
+  x = gsub('https://','',x)
+  x = gsub('http://','',x)
+  x = gsub('[^[:graph:]]', ' ',x)
+  x = gsub('[[:punct:]]', '', x)
+  x = gsub('[[:cntrl:]]', '', x)
+  x = gsub('\\d+', '', x)
+  x = str_replace_all(x,"[^[:graph:]]", " ")
+  return(x)
+}
+
+for (i in 1:2){
+  banks.clean[[i]]$cleanText <- clean.text(banks.clean[[i]]$review.total)
+ }
+
+saveRDS(banks.clean, "banks.clean.rds")
+#traditional bank 14,153 observation, digital bank 41,028 observation
+```
+
+```{r tokenisaion}
+#tokenisation
+banks.token <- NULL
+for(i in 1:2){
+banks.clean[[i]] %>%
+  unnest_tokens(word, cleanText) %>%
+  anti_join(stop_words) %>%
+  count(word, id, score) -> banks.token[[i]] }
+
+# check the length of token and filter based on the length of token
+for(i in 1:2){
+  banks.token[[i]]$token_len <- nchar(banks.token[[i]]$word)
+  # view(banks.token[[i]] %>% group_by(token_len) %>% filter(token_len > 15))
+  # view(banks.token[[i]] %>% group_by(token_len) %>% filter(token_len < 2))
+  banks.token[[i]] %>% 
+   filter(token_len>2 & token_len <= 15) %>% 
+   select(-c(token_len)) -> banks.token[[i]]
+}
+# lemmatisation
+for(i in 1:2){
+  banks.token[[i]]$word <- lemmatize_words(banks.token[[i]]$word)
+}
+
+#tra.bank.token 448,875 observations, dig.bank.token 636,960 observations
+
+
+#check frequent term
+  banks.token[[1]] %>%
+    group_by(score, word) %>%
+    summarise(count = n()) %>%
+    arrange(desc(count)) %>% 
+    top_n(10) %>%
+    ungroup() %>% 
+    mutate(word = reorder_within(word, count, within = score)) %>% 
+    ggplot(aes(x = word, y = count, fill = score))+
+    geom_col()+
+    coord_flip()+
+    scale_x_reordered()+
+    facet_wrap(~score, scales = "free_y")+
+    theme_minimal()+
+    theme(legend.position = "none")+
+    labs(title = "Most frequent words stated in reviews",
+         y = "word frequencies")
+  
+  #'account', 'bank' can be included in stopword
+
+
+saveRDS(banks.token, "banks.token.rds")
+```
+
+```{r tf-idf}
+# Plot unigram tf_idf for traditional banks
+banks.token[[1]] %>%
+  count(score, word) %>%
+  filter(n > 5) %>%
+  bind_tf_idf(word,score,n)%>%
+   group_by(score) %>%
+  arrange(desc(tf_idf)) %>%
+  slice_max(tf_idf,n= 7)%>%
+  ungroup() %>%
+  ggplot(.,aes(x = tf_idf,y = reorder_within(word,tf_idf,
+                                             within = score),
+               fill = score)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~score,scales = "free") +
+  labs(x = "tf_idf by score", y = NULL)
+
+ggsave("tra.uni_tf_idf.png")
+
+# Plot unigram tf_idf for digital banks
+banks.token[[2]] %>%
+  as.data.frame() %>%
+  count(score, word) %>%
+  filter(n > 5) %>%
+  bind_tf_idf(word,score,n)%>%
+   group_by(score) %>%
+  arrange(desc(tf_idf)) %>%
+  slice_max(tf_idf,n= 7)%>%
+  ungroup() %>%
+  ggplot(.,aes(x = tf_idf,y = reorder_within(word,tf_idf,
+                                             within = score),
+               fill = score)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~score,scales = "free") +
+  labs(x = "tf_idf by score", y = NULL)
+
+ggsave("dig.uni_tf_idf.png")
+
+```
+
+
+```{r dtm and sparsity}
+for(i in 1:2){
+banks.token[[i+2]] <- banks.token[[i]] %>%
+    count(score, word) %>%
+    cast_dtm(score, word, n) 
+
+tm::inspect(banks.token[[i+2]])
+# tra.banks sparsity: 74%
+# dig.banks sparsity: 70% 
+
+tm::inspect(weightTfIdf(banks.token[[i+2]])) -> banks.token[[i+4]]
+}
+
+saveRDS(banks.token, "banks.token.rds")
+#banks.token[[1]],[[2]] : tokenisation
+#banks.token[[3]],[[4]] : dtm
+#banks.token[[5]],[[6]] : tf_idf
+```
+
+
+```{r bigram}
+#plot bigram tf_idf of traditional banks
+bigram<-NULL
+for(i in 1:2){ 
+banks.clean[[i]] %>%
+  unnest_tokens(bigram,cleanText,token="ngrams",n=2) %>%
+  na.omit() %>%
+  separate(bigram, sep = " ", into = c("word1","word2")) %>% 
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word) -> bigram[[i]]
+  bigram[[i]]$word1 <- lemmatize_words(bigram[[i]]$word1)
+  bigram[[i]]$word2 <- lemmatize_words(bigram[[i]]$word2)}
+
+bigram[[1]]%>%
+  mutate(bigram = paste0(word1, " ", word2)) %>%
+  select(id, bigram, score) %>%
+  count(score, bigram) %>%
+  filter(n > 3) %>%
+  bind_tf_idf(bigram, score, n) %>%
+  arrange(desc(tf_idf)) %>%
+  group_by(score) %>%
+  slice_max(tf_idf,n=5) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, reorder_within(bigram, tf_idf, within = score), 
+             fill = score)) +
+    geom_col(show.legend = FALSE) + 
+    facet_wrap(~score, ncol = 2, scales = "free") +
+    labs(x = "tf_idf_bigram", y = NULL)
+
+ggsave("tra.bi_tf_idf.png")
+
+
+#plot bigram tf_idf of digital banks
+bigram[[2]]%>%
+  mutate(bigram = paste0(word1, " ", word2)) %>%
+  select(id, bigram, score) %>%
+  count(score, bigram) %>%
+  filter(n > 3) %>%
+  bind_tf_idf(bigram, score, n) %>%
+  arrange(desc(tf_idf)) %>%
+  group_by(score) %>%
+  slice_max(tf_idf,n=5) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, reorder_within(bigram, tf_idf, within = score), 
+             fill = score)) +
+    geom_col(show.legend = FALSE) + 
+    facet_wrap(~score, ncol = 2, scales = "free") +
+    labs(x = "tf_idf_bigram", y = NULL)
+
+ggsave("dig.bi_tf_idf.png")
+```
+
+```{r bigram word network}
+
+word.network <-NULL
+for(i in 1:2){
+word.network[[i]] <- bigram[[i]] %>% 
+  count(word1, word2, sort = TRUE) %>% 
+  filter(n > 200) %>% 
+  graph_from_data_frame()}
+
+set.seed(111)
+a <- arrow(angle = 30, length = unit(0.1, "inches"), ends = "last", type = "open")
+
+#plot
+ggraph(word.network[[1]], layout = "fr") + geom_edge_link(aes(color = n, width = n), arrow = a) + 
+    geom_node_point() + geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+  
+```
+
+```{r trigram}
+#plot trigram tf_idf of traditional banks
+ banks.clean[[1]] %>%
+  unnest_tokens(trigram,cleanText,token="ngrams",n=3) %>%
+  na.omit() %>%
+  separate(trigram, sep = " ", into = c("word1","word2","word3")) %>% 
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word3 %in% stop_words$word) %>%
+  mutate(trigram = paste0(word1, " ", word2, " ", word3)) %>%
+  select(id, score, trigram) %>%
+  count(score, trigram) %>%
+  filter(n > 1)%>%
+  bind_tf_idf(trigram, score, n) %>%
+  arrange(desc(tf_idf)) %>%
+  group_by(score) %>%
+  slice_max(tf_idf,n=5) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, reorder_within(trigram, tf_idf, within = score), fill = score)) +
+  geom_col(show.legend = FALSE) + facet_wrap(~score, ncol = 2, scales = "free") +
+  labs(x = "tf_idf_trigram", y = NULL)
+ggsave("tra.tri_tf_idf.png")
+
+#plot trigram tf_idf of digital banks
+banks.clean[[2]] %>%
+  unnest_tokens(trigram,cleanText,token="ngrams",n=3) %>%
+  na.omit() %>%
+  separate(trigram, sep = " ", into = c("word1","word2","word3")) %>% 
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word3 %in% stop_words$word) %>%
+  mutate(trigram = paste0(word1, " ", word2, " ", word3)) %>%
+  select(id, score, trigram) %>%
+  count(score, trigram) %>%
+  filter(n >2) %>%
+  bind_tf_idf(trigram, score, n) %>%
+  arrange(desc(tf_idf)) %>%
+  group_by(score) %>%
+  slice_max(tf_idf,n=5) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, reorder_within(trigram, tf_idf, within = score), fill = score)) +
+  geom_col(show.legend = FALSE) + facet_wrap(~score, ncol = 2, scales = "free") +
+  labs(x = "tf_idf_trigram", y = NULL)
+ggsave("dig.tri_tf_idf.png")
+```
+
+```{r text features_mention bank name}
+# Check the effect of mentioning bank name on the score
+# Assign binary variable 
+
+for (i in 1:2){
+  for (j in 1:nrow(banks.clean[[i]])){
+    check_h <- as.numeric(grepl(banks.clean[[i]]$company[j],
+                               banks.clean[[i]]$review.total[j],
+                               ignore.case = TRUE))
+   banks.clean[[i]]$bank_mentioned[j] <- check_h
+  }
+}
+ 
+saveRDS(banks.clean, "banks.clean.rds")
+```
+
+#Part B. Sentiment Analysis
+```{r dictionary coverage}
+lm_dictionary <- tidytext::get_sentiments("loughran")
+bing_dictionary <- tidytext::get_sentiments("bing")
+afinn_dictionary <- tidytext::get_sentiments("afinn")
+nrc_dictionary <- tidytext::get_sentiments("nrc")
+
+afinn_dictionary$lexicon <- "afinn"
+bing_dictionary$lexicon <- "lexicon"
+lm_dictionary$lexicon <- "lm"
+nrc_dictionary$lexicon <- "nrc"
+
+
+afinn_dictionary %>% select(word, lexicon) -> afinn_dictionary
+nrc_dictionary %>% select(word, lexicon)->nrc_dictionary
+
+
+
+rbind(bing_dictionary, afinn_dictionary, lm_dictionary, nrc_dictionary) -> sen.new.dic
+rm(afinn_dictionary)
+rm(bing_dictionary)
+rm(lm_dictionary)
+rm(nrc_dictionary)
+
+view(sen.new.dic)
+
+sen.new.dic %>% group_by(lexicon, word) %>% summarise(dictinct_words = n_distinct(word)) ->sen.new.dic
+
+for (i in 1:2) {
+assign(paste0("dic_coverage_", i),
+       banks.token[[i]] %>%
+         mutate(words_in_review = n_distinct(word)) %>%
+         inner_join(sen.new.dic) %>%
+         group_by(lexicon, words_in_review, dictinct_words) %>%
+         summarise(lex_match_words = n_distinct(word)) %>%
+         ungroup() %>%
+         mutate(total_match_words = sum(lex_match_words), #Not used but good to have
+         match_ratio = lex_match_words / words_in_review) %>%
+         select(lexicon, lex_match_words,  
+                words_in_review, match_ratio))
+}
+
+new_sentiments %>%
+  group_by(lexicon, sentiment, words_in_lexicon) %>%
+  summarise(distinct_words = n_distinct(word)) %>%
+  ungroup() %>%
+  spread(sentiment, distinct_words) %>%
+  mutate(lexicon = color_tile("lightblue", "lightblue")(lexicon),
+         words_in_lexicon = color_bar("lightpink")(words_in_lexicon)) %>%
+  my_kable_styling(caption = "Word Counts Per Lexicon")
+```
+
+
+```{r dictionary based sentiment analysis}
+#perform sentiment analysis based on four dictionaries
+
+sen.t <- NULL
+sen.d <- NULL
+
+for(i in 1:2){
+  if( i == 1){
+    #Bing
+    banks.token[[i]] %>% 
+      inner_join(get_sentiments("bing")) %>%
+      count(sentiment, id) %>%
+      spread(sentiment, n) %>%
+      mutate(sentiment_bing = positive - negative) %>%
+      select(id, sentiment_bing) ->sen.t[[i]]
+    
+    # Afinn Dictionary
+    banks.token[[i]] %>% 
+      inner_join(get_sentiments("afinn")) %>% 
+      group_by(id) %>%
+      summarise(sentiment_afinn = sum(n*value)) -> sen.t[[i+1]]
+    
+    # Loughran Dictionary
+     banks.token[[i]] %>% 
+      inner_join(get_sentiments("loughran")) %>% 
+      count(sentiment,id) %>% 
+      spread(sentiment,n) ->ld_sentiment.t
+    
+    ld_sentiment[is.na(ld_sentiment)]<-0
+    ld_sentiment %>%  
+      mutate(sentiment_ld = positive - negative) %>%
+      select(id, sentiment_ld)-> sen.t[[i+2]]
+    
+    # NRC Dictionary 
+    banks.token[[i]] %>%
+      inner_join(get_sentiments("nrc")) %>% 
+      count(sentiment,id) %>% 
+      spread(sentiment,n) %>% 
+      mutate(sentiment_nrc = positive-negative) -> sen.t[[i+3]]}
+    
+    else{
+       #Bing
+    banks.token[[i]] %>% 
+      inner_join(get_sentiments("bing")) %>%
+      count(sentiment, id) %>%
+      spread(sentiment, n) %>%
+      mutate(sentiment_bing = positive - negative) %>%
+      select(id, sentiment_bing) ->sen.d[[i-1]]
+    
+    # Afinn Dictionary
+    banks.token[[i]] %>% 
+      inner_join(get_sentiments("afinn")) %>% 
+      group_by(id) %>%
+      summarise(sentiment_afinn = sum(n*value)) -> sen.d[[i]]
+    
+    # Loughran Dictionary
+     banks.token[[i]] %>% 
+      inner_join(get_sentiments("loughran")) %>% 
+      count(sentiment,id) %>% 
+      spread(sentiment,n) ->ld_sentiment.d
+    
+    ld_sentiment[is.na(ld_sentiment)]<-0
+    ld_sentiment %>%  
+      mutate(sentiment_ld = positive - negative) %>%
+      select(id, sentiment_ld)-> sen.d[[i+1]]
+    
+    # NRC Dictionary 
+    banks.token[[i]] %>%
+      inner_join(get_sentiments("nrc")) %>% 
+      count(sentiment,id) %>% 
+      spread(sentiment,n) %>% 
+      mutate(sentiment_nrc = positive-negative) -> sen.d[[i+2]]
+    }
+
+  }
+
+saveRDS(sen.t, "sen.t.rds")
+saveRDS(sen.d, "sen.d.rds")
+save.image()
+#sen.t[[1]] Bing
+#sen.t[[2]] Afinn
+#sen.t[[3]] Loughran Dictionary
+#sen.t[[4]] NRC Dictionary 
+
+# Check correlation between emotions from NRC dictionary 
+tra.to_corr2 <- sen.t[[4]] %>%
+  select(anger:sentiment_nrc)
+corrplot::corrplot(cor(na.omit(tra.to_corr2)))
+
+dig.to_corr2 <- sen.d[[4]] %>%
+  select(anger:sentiment_nrc)
+corrplot::corrplot(cor(na.omit(dig.to_corr2)))
+
+```
+
+```{r SentimentAnalysis package}
+#perform sentiment analysis using SentimentAnalysis package 
+#To avoid session abortion, split task into small chunks
+spit_size <- 1000
+for_t_sa_list <- split(banks.clean[[1]], 
+                     rep(1:ceiling(nrow(banks.clean[[1]])
+                                   /split_size), 
+                         each=split_size,
+                         length.out=nrow(banks.clean[[1]])))
+for_d_sa_list <- split(banks.clean[[2]], 
+                     rep(1:ceiling(nrow(banks.clean[[2]])
+                                   /split_size), 
+                         each=split_size,
+                         length.out=nrow(banks.clean[[2]])))
+sen.t.sa <- NULL
+sen.d.sa <- NULL
+for(i in 1:length(for_t_sa_list)){
+  analyzeSentiment(for_t_sa_list[[i]]$review.total) ->new.sa
+  rbind(sen.t.sa, new.sa) -> sen.t.sa
+}
+sen.t.sa$id <- banks.clean[[1]]$id
+
+for(i in 1:length(for_d_sa_list)){
+  analyzeSentiment(for_d_sa_list[[i]]$review.total) ->new.sa
+  rbind(sen.d.sa, new.sa) -> sen.d.sa
+}
+sen.d.sa$id <- banks.clean[[2]]$id
+
+
+```
+
+```{r sentmentr}
+#sentiment analysis beyond unigram
+for(i in 1:2){
+  if(i ==1){
+    get_sentences(banks.clean[[i]]$review.total) %>%
+      sentiment_by(n.before = 10, n.after = 10) -> sen.t.sentimentr
+    sen.t.sentimentr$id <- banks.clean[[i]]$id
+   
+  }
+  else{
+     get_sentences(banks.clean[[i]]$review.total) %>%
+      sentiment_by(n.before = 10, n.after = 10) -> sen.d.sentimentr
+    sen.d.sentimentr$id <- banks.clean[[i]]$id
+   
+  }
+    
+}
+
+```
+
+```{r vader}
+#another sentiment analysis beyond unigram
+#one of the best unsupervised sentiment analysis method
+vader::vader_df(banks.clean[[1]]$review.total) -> sen.t.vader
+saveRDS(sen.t.vader, "sen.t.vader.rds")
+
+#get the id
+sen.t.vader$id <- banks.clean[[1]]$id
+
+
+###digital bank###
+vader::vader_df(banks.clean[[2]]$review.total) -> sen.d.vader
+saveRDS(sen.d.vader, "sen.d.vader.rds")
+
+#get the id
+sen.d.vader$id <- banks.clean[[2]]$id
+
+
+```
+
+
+```{r other sentiment features}
+# Calculate the readability of the review
+readability <- NULL
+for(i in 1:2){
+  flesch_kincaid(banks.clean[[i]]$cleanText, banks.clean[[i]]$id) ->readability[[i]]
+  
+  readability[[i]]$Readability %>% select(id, word, count, FK_grd.lvl) ->readability[[i+2]]
+  
+}
+
+
+# count the number of words written in capital letter like 'HATE', 'RECOMMEND'
+# exclude length = 1 such as I, A
+for(i in 1:2){
+  banks.clean[[i]]$capitals <- sapply(gregexpr("\\b[A-Z]{2,}\\b",
+                  banks.clean[[i]]$review.total), function(x) length(c(x[x > 0])))
+  # count the number of exclamation mark
+  banks.clean[[i]]$exclamation <- str_count(banks.clean[[i]]$review.total, '!')
+}
+
+```
+
+
+```{r aggregate sentiment analysis result }
+#4 dictionary, SentimentAnalysis, sentimentr, vader, 2 other features
+
+for(i in 1:2){
+  if(i == 1){
+       sen.t.all   <- banks.clean[[i]] %>%
+       select(id, company, score, 
+              capitals, exclamation, bank_mentioned) %>%
+       left_join(sen.t[[1]]) %>%
+       left_join(sen.t[[2]]) %>%
+       left_join(sen.t[[3]]) %>%
+       left_join(sen.t[[4]]) %>%
+       left_join(sen.t.sa) %>%
+       left_join(sen.t.sentimentr) %>%
+       left_join(sen.t.vader)
+  
+  }
+  else{
+    for(j in 1:4)
+     sen.d.all   <- banks.clean[[i]] %>%
+       select(id, company, score, 
+              capitals, exclamation, bank_mentioned) %>%
+       left_join(sen.d[[j]]) %>%
+       left_join(sen.d.sa) %>%
+       left_join(sen.d.sentimentr) %>%
+       left_join(sen.d.vader)
+  }
+}
+#plotting 4dictionary result
+#bind results for score 1
+sen.t.dic <- sen.t[[1]] %>%
+  mutate(sentiment = sentiment_bing,
+         dictionary = "bing") %>%
+  rbind(sen.t[[2]])
+  
+sen.t[[1]] %>%filter(score ==5) %>%
+  arrange(id) ->b
+  ggplot(data = b, aes(x = id, y = sentiment_bing)) +
+  geom_bar(stat = "identity")
+
+  
+#plot for overall 1
+ggplot(all_results[1:2000,] , aes(x=ReviewID,y=scale(sentiment),fill=dictionary)) 
++ geom_bar(stat="identity",width=8) +facet_wrap(~dictionary,ncol=1,scales="free_y")
+
+# bind results for overall 5
+all_results2 <- bing_result %>% 
+  bind_rows(afinn_result) %>%  bind_rows(loughran_result)  %>% left_join(tokenised) %>% 
+  filter(overall ==5) %>% 
+  arrange(ReviewID)%>% select(sentiment, ReviewID, dictionary) %>% na.omit()
+
+#plot for overall 5
+ggplot(all_results2[1:2000,] , aes(x=ReviewID,y=scale(sentiment),fill=dictionary))
++ geom_bar(stat="identity",width=8) +facet_wrap(~dictionary,ncol=1,scales="free_y")
+#plotting sentimentR result
+qplot((sen.t.all %>% filter(score=="1"))$ave_sentiment,
+      geom="histogram",binwidth=0.1,
+      main="Score 1 Sentiment Histogram",
+      xlab = "Sentiment Score", ylab = "Frequency", colour = I("pink"))
+
+qplot((sen.t.all %>% filter(score=="5"))$ave_sentiment,
+      geom="histogram",binwidth=0.1,main="Score 5 Sentiment Histogram",
+      xlab = "Sentiment Score", ylab = "Frequency", colour = I("blue"))
+
+```
+
+```{r sentiment analysis regression}
+sen.t.all[is.na(sen.t.all)] <- 0
+summary(sen.t.all)  
+as.factor(sen.t.all$score) -> sen.t.all$score
+
+sen.t.m.1 <- glm(score ~ sentiment_bing, family = 'binomial', data = sen.t.all)
+sen.t.m.2 <- glm(score ~ sentiment_ld, family = 'binomial', data = sen.t.all)
+sen.t.m.3 <- glm(score ~ sentiment_afinn, family = 'binomial', data = sen.t.all)
+sen.t.m.4 <- glm(score ~ sentiment_nrc, family = 'binomial', data = sen.t.all)
+sen.t.m.5 <- glm(score ~ SentimentGI, family = 'binomial', data = sen.t.all)
+sen.t.m.6 <- glm(score ~ SentimentHE, family = 'binomial', data = sen.t.all)
+sen.t.m.7 <- glm(score ~ SentimentLM, family = 'binomial', data = sen.t.all)
+sen.t.m.8 <- glm(score ~ SentimentQDAP, family = 'binomial', data = sen.t.all)
+sen.t.m.9 <- glm(score ~ ave_sentiment, family = 'binomial', data = sen.t.all)
+sen.t.m.10 <- glm(score ~ compound, family = 'binomial', data = sen.t.all)
+sen.t.m.11 <- glm(score ~ capitals, family = 'binomial', data = sen.t.all)
+sen.t.m.12 <- glm(score ~ exclamation, family = 'binomial', data = sen.t.all)
+sen.t.m.13 <- glm(score ~ bank_mentioned, family = 'binomial', data = sen.t.all)
+
+sen.t.m.14 <- glm(score~ sentiment_bing+sentiment_ld+ sentiment_afinn+sentiment_nrc+SentimentGI+SentimentHE+SentimentLM+SentimentQDAP+SentimentGI+ave_sentiment+compound+capitals+exclamation+bank_mentioned, family = 'binomial', data = sen.t.all)
+
+stargazer::stargazer(sen.t.m.1,sen.t.m.2,sen.t.m.3,sen.t.m.4,sen.t.m.5,
+                     sen.t.m.6,sen.t.m.7,sen.t.m.8,sen.t.m.9,sen.t.m.10,
+                     sen.t.m.11,sen.t.m.12,sen.t.m.13,sen.t.m.14, type = "text")
+```
+
+#Part C Topic Modelling
+
+```{r preprocess for topicmodelling}
+top.t.stm <- banks.clean[[1]] %>%
+  select(id, company, score, review.total)
+
+top.d.stm <- banks.clean[[2]] %>%
+  select(id, company, score, review.total)
+```
+
+```{r udpipe traditional.bank}
+language <- udpipe_download_model(language="english",overwrite = F)
+language.model <- udpipe_load_model(language$file_model)
+
+tra.annotated_reviews_all <- data.frame()
+
+# parallelization 
+ 
+split_size <- 1000
+for_t_pos_list <- split(top.t.stm, 
+                     rep(1:ceiling(nrow(top.t.stm)
+                                   /split_size), 
+                         each=split_size,
+                         length.out=nrow(top.t.stm)))
+
+
+
+for(i in 1:length(for_t_pos_list)){
+    udpipe_annotate(for_t_pos_list[[i]]$review.total,
+                doc_id = for_t_pos_list[[i]]$id,
+                object = language.model,
+                parallel.cores = 16,) %>% 
+    as.data.frame() %>% 
+    filter(upos %in% c("NOUN","ADJ","ADV")) %>%
+    select(doc_id,lemma) %>% 
+    group_by(doc_id) %>% 
+    summarise(annotated_review = paste(lemma, collapse = " ")) %>% 
+    rename(id = doc_id) -> new.annotated
+  
+    tra.annotated_reviews_all <- rbind(tra.annotated_reviews_all,
+                                     new.annotated)
+}
+
+#check the result with review.data.clean
+tra.annotated_reviews_all$id <- as.numeric(tra.annotated_reviews_all$id)
+
+view(tra.data.clean %>% left_join(tra.annotated_reviews_all))
+
+saveRDS(tra.annotated_reviews_all, "tra.annotated_reviews_all.rds")
+
+```
+
+
+```{r stm traditional.bank}
+# Prepare metadata for the STM model
+
+top.t.stm <- tra.annotated_reviews_all %>% 
+  left_join(top.t.stm)  
+
+
+# First we engage with the textProcessor function
+# Notice that you should augment the custom 
+# stopwords
+processed <- textProcessor(top.t.stm$annotated_review,
+                           metadata = top.t.stm,
+                           customstopwords = c("bank","account","customer", "barclays", "hsbc", "santander", "natwest", "nationwide"),
+                           stem = F)
+
+# Keep only those words that appear 
+# on the 1% of the corpus
+# 
+threshold <- round(1/100 * length(processed$documents),0)
+
+t.out <- prepDocuments(processed$documents,
+                     processed$vocab,
+                     processed$meta,
+                     lower.thresh = threshold)
+saveRDS(t.out, "t.out.rds")
+```
+
+
+```{r find kappa using 4 charts traditional.bank, eval=FALSE}
+num_topics.t <- searchK(t.out$documents,
+                        t.out$vocab,
+                        K=seq(from=4, to=15,by=1))
+
+#plot the diagnostic plots to choose k
+plot(num_topics.t)
+```
+
+```{r stm run traditional.bank}
+t.bank.fit <- stm(documents = t.out$documents,
+                   vocab = t.out$vocab,
+                   K = 14,
+                   prevalence =~ score,
+                   max.em.its = 75, 
+                   data = t.out$meta,
+                   reportevery=5,
+                   # gamma.prior = "L1",
+                   sigma.prior = 0.7,
+                   init.type = "LDA")
+
+summary(t.bank.fit)
+plot(t.bank.fit)
+
+save.image()
+
+```
+
+
+```{r topic labelling tra.bank}
+#check the most relevant reviews
+findThoughts(t.bank.fit, texts = t.out$meta$review.total, topics = 12, n = 3)
+
+#label topics
+t.topic_labs <- c('1. Interest Rate', 
+                  '2. Address related Issues', 
+                  '3. Waiting time',
+                  '4. Satisfaction on branch banking', 
+                  '5. Loan and overdraft', 
+                  '6. Overall dissatisfaction', 
+                  '7. Complaints on bank', 
+                  '8. Poor online service',
+                  '9. Slow process',
+                  '10. Easy to use app', 
+                  '11. Dissatisfaction from long-term customer',
+                  '12. Long queue on chat and branch',
+                  '13. Dissatisfaction on credit card', 
+                  '14. Insurance and claims')
+
+
+t.topic_summary <- summary(t.bank.fit)
+t.topic_proportions <- colMeans(t.bank.fit$theta)
+
+t.table_towrite_labels <- data.frame()
+for(i in 1:length(t.topic_summary$topicnums)){
+
+   row_here <- tibble(topicnum= t.topic_summary$topicnums[i],
+                      topic_label = t.topic_labs[i],
+                      proportion = 100*round(t.topic_proportions[i],4),
+                     frex_words = paste(t.topic_summary$frex[i,1:7],
+                                        collapse = ", "))
+   t.table_towrite_labels <- rbind(row_here,t.table_towrite_labels)
+}
+t.table_towrite_labels %>% arrange(topicnum) ->t.table_towrite_labels
+view(t.table_towrite_labels)
+```
+
+
+```{r marginal effect, eval=FALSE}
+
+#plot the marginal effects
+
+t.effects <- estimateEffect(~score, 
+                            stmobj = t.bank.fit,
+                            metadata = t.out$meta )
+
+
+#plot marginal effect
+plot(t.effects, covariate = "score", 
+     topics = c(1:14), 
+     model = t.bank.fit, method = "difference",
+     cov.value1 = "100", cov.value2 = "0", 
+     xlab = "Low score ... High score",
+     main = "Marginal Effects", 
+     xlim = c(-0.03, 0.04),
+     custom.labels = t.topic_labs,
+     labeltype = "custom" )
+  
+
+```
+
+```{r indivisual marginal effect, eval=FALSE}
+#plot marginal effect based on different model
+
+for(i in 1:14){
+plot(t.effects, covariate = "score",
+     topics = i,
+     model = t.bank.fit, method = "continuous",
+     # For this plotting we get the uper quantile
+     # and low quantile of the price 
+     xlab = "score",
+     main = t.topic_labs[i],
+     printlegend = FALSE,
+     custom.labels =t.topic_labs[i],
+     labeltype = "custom")
+}
+```
+
+
+```{r wordcloud, eval=FALSE}
+
+#plot the topics dominant word
+plot(t.bank.fit)
+
+#plot the word cloud from topic 1 to K
+
+for(i 1:14){
+  cloud(t.bank.fit,
+        topic=14)
+}
+
+```
+
+```{r supervised topic modelling-sLDA}
+install.packages("lda")
+library(lda)
+
+tra.nest <- banks.token[[1]] %>% group_by(id) %>% 
+  summarise(word = paste(word, collapse = " "))
+
+## change to lda data format
+top.t.slda <- tra.nest %>% pull(word) %>% lexicalize(lower = TRUE)
+
+params <- sample(c(-1, 1), 14, replace = TRUE)  ## starting values
+
+tra.data$score <- as.numeric(tra.data$score)
+
+# Some tokens are deleted based on token length, which might affect the number of id. To have the same length of documents and sy, make a new dataframe based on the number of id of token.tra
+banks.token[[1]]%>% group_by(id) %>% select(id) %>%
+  left_join(banks.clean[[1]]) %>% select(id, score) -> top.t.sy
+
+sy = tapply(top.t.sy$score, top.t.sy$id, mean)
+
+
+top.t.slda_mod <- lda::slda.em(documents = top.t.slda$documents,
+                               K = 14,
+                               vocab = top.t.slda$vocab, 
+                               num.e.iterations = 100, 
+                               num.m.iterations = 4, 
+                               alpha = 1, eta = 0.1, params = params, 
+                               variance = var(sy), annotations = sy, 
+                               method = "sLDA")
+
+summary(top.t.slda_mod$model)
+```
+
+```{r sLDA plotting tra.bank}
+top.t.topics <- top.t.slda_mod$topics %>% 
+  top.topic.words(5, by.score = TRUE) %>% 
+  apply(2, paste, collapse = ",")
+
+# Regression coefficients for each topic
+coefs <- data.frame(coef(summary(top.t.slda_mod$model)))
+coefs <- cbind(coefs, topics = factor(top.t.topics, 
+                                      top.t.topics[order(coefs$Estimate,
+                                                         coefs$Std..Error)]))
+coefs <- coefs[order(coefs$Estimate), ]
+
+coefs %>% ggplot(aes(top.t.topics, Estimate, colour = Estimate)) + geom_point() + geom_errorbar(width = 0.5, 
+    aes(ymin = Estimate - 1.96 * Std..Error, ymax = Estimate + 1.96 * Std..Error)) + 
+    coord_flip() + theme_bw()
+```
+
+```{r causaleffect,results='asis'}
+t.stm.object <- t.bank.fit$theta
+colnames(t.stm.object) <- paste0("topic_",1:14)
+t.causal_topic_df <- cbind(t.out$meta,t.stm.object)
+
+# create topic summaries 
+causal_topic_df %>% 
+  group_by(month_year,listing_id) %>% 
+  summarise(mtopic1=mean(topic_1),
+            mtopic2 = mean(topic_2),
+            mtopic3 = mean(topic_3),
+            mtopic4 = mean(topic_4),
+            mtopic5 = mean(topic_5),
+            mtopic6 = mean(topic_6),
+            mtopic7 = mean(topic_7),
+            mtopic8 = mean(topic_8),
+            mtopic9 = mean(topic_9),
+            mtopic10 = mean(topic_10)) %>% 
+  left_join(to_regress_sentiment_price_occ) %>% 
+  na.omit() -> regress_stm_occ_price
+
+
+model0_occ <- lm(occupancy_rate~avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model1_occ <- lm(occupancy_rate~mtopic1+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model2_occ <- lm(occupancy_rate~mtopic2+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model3_occ <- lm(occupancy_rate~mtopic3+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model4_occ <- lm(occupancy_rate~mtopic4+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model5_occ <- lm(occupancy_rate~mtopic5+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model6_occ <- lm(occupancy_rate~mtopic6+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model7_occ <- lm(occupancy_rate~mtopic7+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model8_occ <- lm(occupancy_rate~mtopic8+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model9_occ <- lm(occupancy_rate~mtopic9+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+model10_occ <- lm(occupancy_rate~mtopic10+avg_sentiment_bing_liu,data=regress_stm_occ_price)
+stargazer::stargazer(model1_occ,model2_occ,
+                     model3_occ,model4_occ,
+                     model5_occ,model6_occ,
+                     model7_occ,model8_occ,
+                     model9_occ,model10_occ,
+                     type = "text")
+
+```
+
+###digital bank###
+```{r udpipe digital.bank}
+split_size <- 10000
+for_d_pos_list <- split(top.d.stm, 
+                     rep(1:ceiling(nrow(top.d.stm)
+                                   /split_size), 
+                         each=split_size,
+                         length.out=nrow(top.d.stm)))
+
+
+
+
+for(i in 1:length(for_d_pos_list)){
+    udpipe_annotate(for_d_pos_list[[i]]$review.total,
+                doc_id = for_d_pos_list[[i]]$id,
+                object = language.model,
+                parallel.cores = 16,
+                trace = 1000
+                ) %>% 
+    as.data.frame() %>% 
+    filter(upos %in% c("NOUN","ADJ","ADV")) %>%
+    select(doc_id,lemma) %>% 
+    group_by(doc_id) %>% 
+    summarise(annotated_review = paste(lemma, collapse = " ")) %>% 
+    rename(id = doc_id) -> new.annotated
+ saveRDS(new.annotated, paste0('crashprotector',i,'.rds'))
+}
+save.image()
+
+dig.annotated_reviews_all <- data.frame()
+for(i in 1:length(for_d_pos_list)){
+  readRDS(paste0('crashprotector',i,'.rds')) -> new
+  rbind(dig.annotated_reviews_all, new) ->dig.annotated_reviews_all
+}
+
+#check the result with review.data.clean
+dig.annotated_reviews_all$id <- as.numeric(dig.annotated_reviews_all$id)
+
+view(dig.data.clean %>%
+  left_join(dig.annotated_reviews_all))
+
+saveRDS(dig.annotated_reviews_all, "dig.annotated_reviews_all.rds")
+save.image()
+```
+
+```{r stm digital.bank}
+###digital bank###
+# Prepare metadata for the STM model
+
+top.d.stm <- dig.annotated_reviews_all %>% 
+  left_join(top.d.stm)  
+saveRDS(top.d.stm, "top.d.stm.rds")
+
+
+# First we engage with the textProcessor function
+# Notice that you should augment the custom 
+# stopwords
+processed.d <- textProcessor(top.d.stm$annotated_review,
+                           metadata = top.d.stm,
+                           customstopwords = c("bank","account","customer", "revolut", "monzo", "starling"),
+                           stem = F)
+
+# Keep only those words that appear 
+# on the 1% of the corpus
+
+threshold <- round(1/100 * length(processed.d$documents),0)
+
+d.out <- prepDocuments(processed.d$documents,
+                     processed.d$vocab,
+                     processed.d$meta,
+                     lower.thresh = threshold)
+saveRDS(d.out, "d.out.rds")
+```
+
+```{r find kappa digital.bank}
+###digital bank###
+num_topics.d <- searchK(d.out$documents,d.out$vocab,K=seq(from=4, to=15,by=1))
+save.image()
+
+
+
+#plot the diagnostic plots to choose k
+plot(num_topics.d)
+save.image()
+```
+
+```{r stm run digital.bank}
+d.bank.fit <- stm(documents = d.out$documents,
+                   vocab = d.out$vocab,
+                   K = 14,
+                   prevalence =~ score,
+                   max.em.its = 75, 
+                   data = d.out$meta,
+                   reportevery=5,
+                   # gamma.prior = "L1",
+                   sigma.prior = 0.7,
+                   init.type = "LDA")
+
+
+summary(d.bank.fit)
+plot(d.bank.fit)
+save.image()
+
+
+# For presenting the topics you have to use the custom 
+# function to achieve the same result with a table 
+# calculating the corpus-level theta and the 
+# top words for each topic 
+
+topic_summary <- summary(d.bank.fit)
+topic_proportions <- colMeans(d.bank.fit$theta)
+# The number here is the number of topics 
+# don't forget to change it for an optimal 
+# solution
+topic_labels <- paste0("topic_",1:14)
+# topic_labels <- c("nice host","comfortable place",....)
+
+table_towrite_labels <- data.frame()
+for(i in 1:length(topic_summary$topicnums)){
+
+   row_here <- tibble(topicnum= topic_summary$topicnums[i],
+                      topic_label = topic_labels[i],
+                      proportion = 100*round(topic_proportions[i],4),
+                     frex_words = paste(topic_summary$frex[i,1:7],
+                                        collapse = ", "))
+   table_towrite_labels <- rbind(row_here,table_towrite_labels)
+}
+table_towrite_labels %>% arrange(topicnum) ->table_towrite_labels
+view(table_towrite_labels)
+
+# For a complete solution you need to label 
+# your topics. Use the cloud() function to get 
+# the dominant word
+```
+
+
+
+```{r supervised topic modelling-sLDA dig.bank}
+install.packages("lda")
+library(lda)
+
+
+dig.nest <- token.dig.2 %>% filter(!word %in% c('starling', 'monzo', 'revolut')) %>% group_by(id) %>% summarise(word = paste(word, collapse = " "))
+
+## change to lda data format
+topic.d.slda <- dig.nest %>% pull(word) %>% lexicalize(lower = TRUE)
+
+params <- sample(c(-1, 1), 14, replace = TRUE)  ## starting values
+
+token.dig.2 %>% filter(!word %in% c('starling', 'monzo', 'revolut')) %>% group_by(id) %>% select(id) %>% left_join(dig.data) %>% select(id, score) -> top.d.sy
+top.d.sy$score <- as.numeric(top.d.sy$score)
+
+sy = tapply(top.d.sy$score, top.d.sy$id, mean)
+
+
+
+top.d.slda_mod <- slda.em(documents = topic.d.slda$documents, 
+    K = 14, 
+    vocab = topic.d.slda$vocab, 
+    num.e.iterations = 100, 
+    num.m.iterations = 4,
+    alpha = 1, eta = 0.1, 
+    params = params, 
+    variance = var(sy), 
+    annotations = sy, 
+    method = "sLDA")
+
+summary(top.d.slda_mod$model)
+```
+
+```{r slda plotting dig.bank}
+top.d.topics <- top.d.slda_mod$topics %>% top.topic.words(5, by.score = TRUE) %>% apply(2, paste, 
+    collapse = ",")
+
+# Regression coefficients for each topic
+coefs <- data.frame(coef(summary(top.d.slda_mod$model)))
+coefs <- cbind(coefs, topics = factor(top.d.topics, top.d.topics[order(coefs$Estimate, coefs$Std..Error)]))
+coefs <- coefs[order(coefs$Estimate), ]
+
+coefs %>% ggplot(aes(top.d.topics, Estimate, colour = Estimate)) + geom_point() + geom_errorbar(width = 0.5, 
+    aes(ymin = Estimate - 1.96 * Std..Error, ymax = Estimate + 1.96 * Std..Error)) + 
+    coord_flip() + theme_bw()
+save.image()
+```
